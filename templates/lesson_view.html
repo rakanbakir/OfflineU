@@ -257,12 +257,14 @@
                 }
             }
 
+            const LESSON_PATH = {{ lesson_path | tojson }};
+
             function saveProgress(progressSeconds, completed = false) {
                 fetch('/api/progress', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        lesson_path: '{{ lesson_path }}',
+                        lesson_path: LESSON_PATH,
                         completed: completed,
                         progress_seconds: Math.floor(progressSeconds)
                     })

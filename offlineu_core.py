@@ -6,10 +6,12 @@ Enhanced version with dynamic subdirectory navigation
 
 import os
 import json
+import logging
 import mimetypes
 import re
 import sys
 import argparse
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass, asdict
@@ -18,6 +20,19 @@ from flask import Flask, render_template, request, jsonify, send_file, redirect,
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
+
+# Set up logging to logs/ folder
+_logs_dir = Path('logs')
+_logs_dir.mkdir(exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        RotatingFileHandler('logs/offlineu.log', maxBytes=5_000_000, backupCount=3),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # Supported file types
 VIDEO_EXTENSIONS = {'.mp4', '.mkv', '.avi', '.mov', '.webm', '.m4v', '.flv', '.wmv'}
@@ -261,12 +276,42 @@ class ProgressTracker:
     """Handles progress tracking and persistence"""
 
     @staticmethod
+    def _normalize_progress(raw: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize legacy progress keys: HTML-unescape &amp; and strip old title suffix."""
+        import html
+        normalized: Dict[str, Any] = {}
+        for key, value in raw.items():
+            if key == 'last_accessed_path':
+                # Normalize the stored path value too
+                normalized[key] = html.unescape(key if not isinstance(value, str) else value)
+                continue
+            clean_key = html.unescape(key)
+            # Strip legacy title suffix: last component has no file extension → it's a title
+            parts = clean_key.rsplit('/', 1)
+            if len(parts) == 2 and '.' not in parts[1]:
+                clean_key = parts[0]
+            # Deduplicate: prefer the entry marked completed or the later timestamp
+            if clean_key in normalized and isinstance(value, dict) and isinstance(normalized[clean_key], dict):
+                existing = normalized[clean_key]
+                if value.get('completed') and not existing.get('completed'):
+                    normalized[clean_key] = value
+            else:
+                normalized[clean_key] = value
+        return normalized
+
+    @staticmethod
     def load_progress(course: Course) -> Dict[str, Any]:
         """Load progress from JSON file"""
         try:
+            if not os.path.exists(course.progress_file):
+                return {}
             with open(course.progress_file, 'r') as f:
-                return json.load(f)
+                raw = json.load(f)
+            return ProgressTracker._normalize_progress(raw)
         except (FileNotFoundError, json.JSONDecodeError):
+            return {}
+        except Exception as e:
+            logger.error(f"Error loading progress: {e}")
             return {}
 
     @staticmethod
@@ -275,12 +320,14 @@ class ProgressTracker:
         try:
             with open(course.progress_file, 'w') as f:
                 json.dump(progress_data, f, indent=2)
+            logger.info(f"Progress saved: {course.progress_file}")
         except Exception as e:
-            print(f"Error saving progress: {e}")
+            logger.error(f"Error saving progress to {course.progress_file}: {e}")
 
     @staticmethod
     def update_lesson_progress(course: Course, lesson_path: str, completed: bool = False, progress_seconds: int = 0):
         """Update progress for specific lesson by path"""
+        logger.info(f"Updating progress: path={lesson_path!r}, completed={completed}, seconds={progress_seconds}")
         progress = ProgressTracker.load_progress(course)
         
         progress[lesson_path] = {
@@ -288,8 +335,6 @@ class ProgressTracker:
             'progress_seconds': progress_seconds,
             'last_accessed': datetime.now().isoformat()
         }
-        
-        # Update last accessed path
         progress['last_accessed_path'] = lesson_path
         
         ProgressTracker.save_progress(course, progress)
@@ -300,26 +345,19 @@ class ProgressTracker:
         progress = ProgressTracker.load_progress(course)
         
         def apply_to_node(node: DirectoryNode):
-            # Apply progress to lessons in this node
             for lesson in node.lessons:
                 lesson_path = os.path.relpath(lesson.path, course.path)
                 lesson_path = lesson_path.replace('\\', '/')
                 if lesson_path.startswith('/'):
                     lesson_path = lesson_path[1:]
                 
-                # Check both the base path and path with title
-                lesson_path_with_title = f"{lesson_path}/{lesson.title.replace(' ', '_')}"
-                
-                if lesson_path in progress:
-                    lesson.completed = progress[lesson_path].get('completed', False)
-                    lesson.last_accessed = progress[lesson_path].get('last_accessed')
-                    lesson.progress_seconds = progress[lesson_path].get('progress_seconds', 0)
-                elif lesson_path_with_title in progress:
-                    lesson.completed = progress[lesson_path_with_title].get('completed', False)
-                    lesson.last_accessed = progress[lesson_path_with_title].get('last_accessed')
-                    lesson.progress_seconds = progress[lesson_path_with_title].get('progress_seconds', 0)
+                # Look up by the canonical path key
+                data = progress.get(lesson_path)
+                if data:
+                    lesson.completed = data.get('completed', False)
+                    lesson.last_accessed = data.get('last_accessed')
+                    lesson.progress_seconds = data.get('progress_seconds', 0)
             
-            # Recursively apply to children
             for child in node.children.values():
                 apply_to_node(child)
         
@@ -342,14 +380,13 @@ def index():
     global current_course
 
     if current_course is None:
-        # Show dashboard with course selection option
         return render_template('course_dashboard.html',
                                course=None,
                                stats={'total_lessons': 0, 'completed_lessons': 0, 'completion_percentage': 0})
 
-    # Apply progress data to tree
     ProgressTracker.apply_progress_to_tree(current_course)
     stats = ProgressTracker.get_completion_stats(current_course)
+    logger.info(f"Dashboard: {stats}")
 
     return render_template('course_dashboard.html',
                            course=current_course,
@@ -534,13 +571,19 @@ def view_lesson(lesson_path: str):
     if current_index < len(all_lessons) - 1:
         next_lesson = all_lessons[current_index + 1][0]
 
+    # Convert lesson.path to the progress-tracking format (relative path from course root)
+    progress_lesson_path = os.path.relpath(lesson.path, current_course.path)
+    progress_lesson_path = progress_lesson_path.replace('\\', '/')
+    if progress_lesson_path.startswith('/'):
+        progress_lesson_path = progress_lesson_path[1:]
+
     # Update last accessed
-    ProgressTracker.update_lesson_progress(current_course, lesson_path)
+    ProgressTracker.update_lesson_progress(current_course, progress_lesson_path)
 
     return render_template('lesson_view.html',
                            course=current_course,
                            lesson=lesson,
-                           lesson_path=lesson_path,
+                           lesson_path=progress_lesson_path,
                            prev_lesson=prev_lesson,
                            next_lesson=next_lesson)
 
@@ -618,12 +661,16 @@ def update_progress():
     completed = data.get('completed', False)
     progress_seconds = data.get('progress_seconds', 0)
 
+    if not lesson_path:
+        return jsonify({'error': 'lesson_path is required'}), 400
+
     try:
         ProgressTracker.update_lesson_progress(
             current_course, lesson_path, completed, progress_seconds
         )
         return jsonify({'success': True})
     except Exception as e:
+        logger.error(f"Error updating progress: {e}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -850,29 +897,39 @@ def create_templates():
 
         <script>
             function markCompleted() {
+                const lessonPath = '{{ lesson_path }}';
+                console.log('Marking lesson as completed:', lessonPath);
+                
                 fetch('/api/progress', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        lesson_path: '{{ lesson_path }}',
+                        lesson_path: lessonPath,
                         completed: true,
                         progress_seconds: getProgressSeconds()
                     })
                 })
                 .then(r => r.json())
                 .then(data => {
+                    console.log('Progress response:', data);
                     if (data.success) {
-                        alert('Lesson marked as completed!');
+                        alert('✓ Lesson marked as completed!');
                         window.location.href = '/';
+                    } else {
+                        alert('Error: ' + (data.error || 'Failed to mark as completed'));
                     }
+                })
+                .catch(error => {
+                    console.error('Error marking lesson as completed:', error);
+                    alert('Error: ' + error.message);
                 });
             }
 
             function getProgressSeconds() {
                 const video = document.getElementById('video-player');
                 const audio = document.getElementById('audio-player');
-                if (video && !video.paused) return Math.floor(video.currentTime);
-                if (audio && !audio.paused) return Math.floor(audio.currentTime);
+                if (video) return Math.floor(video.currentTime || 0);
+                if (audio) return Math.floor(audio.currentTime || 0);
                 return 0;
             }
 
@@ -888,7 +945,8 @@ def create_templates():
                             completed: false,
                             progress_seconds: seconds
                         })
-                    });
+                    })
+                    .catch(error => console.error('Auto-save error:', error));
                 }
             }, 30000); // Save every 30 seconds
         </script>
