@@ -446,11 +446,18 @@
                 <h2>Select a Course</h2>
                 <p>Enter the full path to your course directory:</p>
                 <div style="margin: 20px 0;">
-                    <input type="text" id="course-path" placeholder="e.g., C:\Users\YourName\Documents\MyCourse">
-                    <button onclick="loadCourseFromPath()" class="btn">Load Course</button>
+                    <!-- Hidden file input as fallback -->
+                    <input type="file" id="folder-input" webkitdirectory directory mozdirectory style="display: none;">
+                    
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <input type="text" id="course-path" placeholder="e.g., /Users/YourName/Courses/MyCourse" style="flex: 1; min-width: 250px; padding: 10px; border: 1px solid #555; background: #444; color: #e0e0e0; border-radius: 5px; font-size: 14px;">
+                        <button onclick="loadCourseFromPath()" class="btn">Load Course</button>
+                        <button onclick="openFileDialog()" class="btn" style="background: #666; margin: 0;">Browse</button>
+                    </div>
                 </div>
                 
                 <div id="course-status" style="margin-top: 10px;"></div>
+                <span id="selected-folder" style="color: #999; font-size: 12px;"></span>
                 
                 <p style="margin-top: 20px; font-size: 12px; color: #999;">
                     <strong>Examples:</strong><br>
@@ -510,6 +517,15 @@
             }
         }
 
+        function openFileDialog() {
+            const statusDiv = document.getElementById('course-status');
+            const selectedFolderSpan = document.getElementById('selected-folder');
+            
+            // For server environments, skip native dialog and use web-based picker
+            console.log('Opening web-based file picker');
+            document.getElementById('folder-input').click();
+        }
+
         function loadCourseFromPath() {
             const pathInput = document.getElementById('course-path');
             const statusDiv = document.getElementById('course-status');
@@ -542,16 +558,84 @@
                 statusDiv.innerHTML = '<p style="color: #ff6b6b;">Error loading course. Please check the path and try again.</p>';
             });
         }
+
+        function extractCoursePath(files) {
+            if (files.length === 0) return null;
+            
+            // Get the first file's path
+            const firstFile = files[0];
+            const fullPath = firstFile.webkitRelativePath || firstFile.name;
+            
+            // Extract the root directory (first folder in the path)
+            const pathParts = fullPath.split('/');
+            if (pathParts.length > 0) {
+                return pathParts[0];
+            }
+            
+            return null;
+        }
         
-        // Allow Enter key to submit
+        // Handle folder selection as fallback
         document.addEventListener('DOMContentLoaded', function() {
+            const folderInput = document.getElementById('folder-input');
             const pathInput = document.getElementById('course-path');
+            const selectedFolderSpan = document.getElementById('selected-folder');
+            const statusDiv = document.getElementById('course-status');
+            
+            // Handle folder picker selection
+            if (folderInput) {
+                folderInput.addEventListener('change', function(e) {
+                    const files = e.target.files;
+                    
+                    if (files && files.length > 0) {
+                        const firstFile = files[0];
+                        const webkitPath = firstFile.webkitRelativePath || '';
+                        
+                        if (webkitPath) {
+                            // Extract the root folder name
+                            const pathParts = webkitPath.split('/');
+                            const rootFolder = pathParts[0];
+                            
+                            selectedFolderSpan.textContent = `📁 Selected folder: ${rootFolder}`;
+                            selectedFolderSpan.style.color = '#28a745';
+                            
+                            // Show loading status
+                            statusDiv.innerHTML = '<p style="color: #007acc;">Loading course...</p>';
+                            
+                            // Try to load the course using the root folder name
+                            fetch('/load_course', {
+                                method: 'POST',
+                                headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({course_path: rootFolder})
+                            })
+                            .then(r => r.json())
+                            .then(data => {
+                                if (data.success) {
+                                    statusDiv.innerHTML = '<p style="color: #28a745;">Course loaded successfully! Redirecting...</p>';
+                                    setTimeout(() => location.reload(), 1000);
+                                } else {
+                                    statusDiv.innerHTML = `<p style="color: #ff6b6b;">Error: ${data.error}</p>`;
+                                    selectedFolderSpan.innerHTML = `📁 ${rootFolder} - <span style="color: #ff6b6b;">Failed to load</span>`;
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error:', error);
+                                statusDiv.innerHTML = '<p style="color: #ff6b6b;">Error loading course. Try entering the full path manually.</p>';
+                            });
+                        }
+                    }
+                });
+            }
+            
+            // Allow Enter key to submit path
             if (pathInput) {
                 pathInput.addEventListener('keypress', function(e) {
                     if (e.key === 'Enter') {
                         loadCourseFromPath();
                     }
                 });
+                // Focus on path input by default
+                pathInput.focus();
             }
         });
     </script>

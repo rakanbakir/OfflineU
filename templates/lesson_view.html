@@ -175,18 +175,21 @@
             const filePath = '{{ text_file|replace("\\", "/") }}';
             console.log('Encoded file path:', filePath);
             
-            // Check if this is an HTML file
+            // Check if this is an HTML or PDF file
             const isHtmlFile = filePath.toLowerCase().endsWith('.html');
+            const isPdfFile = filePath.toLowerCase().endsWith('.pdf');
             const contentDiv = document.getElementById('content-{{ loop.index0 }}');
             
-            if (isHtmlFile) {
-                // For HTML files, create an iframe
-                console.log('Creating iframe for HTML file');
+            if (isHtmlFile || isPdfFile) {
+                // For HTML and PDF files, create an iframe
+                console.log('Creating iframe for file:', filePath);
+                const iframeType = isPdfFile ? 'application/pdf' : 'text/html';
                 contentDiv.innerHTML = `
                     <iframe 
                         src="/files/${encodeURIComponent(filePath)}" 
                         style="width: 100%; height: 600px; border: none; border-radius: 5px;"
                         title="${filePath.split('/').pop()}"
+                        type="${iframeType}"
                     ></iframe>
                 `;
             } else {

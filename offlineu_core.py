@@ -433,14 +433,54 @@ def load_course():
     data = request.json
     course_path = data.get('course_path')
 
-    if not course_path or not os.path.exists(course_path):
-        return jsonify({'error': 'Invalid course path'}), 400
+    if not course_path:
+        return jsonify({'error': 'Course path is required'}), 400
+
+    # If it's not an absolute path or doesn't exist, try to find it
+    if not os.path.exists(course_path):
+        # Try to find the folder in common locations
+        common_paths = [
+            course_path,  # Try as-is first
+            os.path.expanduser(f"~/{course_path}"),  # Home directory
+            os.path.expanduser(f"~/Downloads/{course_path}"),  # Downloads
+            os.path.expanduser(f"~/Documents/{course_path}"),  # Documents
+            os.path.expanduser(f"~/Desktop/{course_path}"),  # Desktop
+            os.path.expanduser(f"~/Courses/{course_path}"),  # Courses folder
+            f"/Volumes/{course_path}",  # External drives (Mac)
+        ]
+        
+        found_path = None
+        for path in common_paths:
+            if os.path.exists(path) and os.path.isdir(path):
+                found_path = path
+                break
+        
+        if not found_path:
+            return jsonify({
+                'error': f'Course folder not found: "{course_path}". Try providing the full absolute path.',
+                'searched_locations': common_paths[:3]  # Show the main ones tried
+            }), 400
+        
+        course_path = found_path
 
     try:
         current_course = DynamicCourseParser.scan_directory(course_path)
         return jsonify({'success': True, 'course_name': current_course.name})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Error scanning course at {course_path}: {e}")
+        return jsonify({'error': f'Failed to load course: {str(e)}'}), 500
+
+
+@app.route('/api/file-dialog', methods=['POST'])
+def open_file_dialog():
+    """Open native file dialog to select course directory - falls back to web-based picker"""
+    # Native file dialogs require GUI environment and tkinter, which may not be available
+    # in server environments. Return info to use web-based file picker instead.
+    return jsonify({
+        'success': False,
+        'available': False,
+        'message': 'Using web-based file picker. Native dialogs are not available in this environment.'
+    }), 200
 
 
 @app.route('/lesson/<path:lesson_path>')
