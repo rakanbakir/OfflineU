@@ -687,27 +687,20 @@ def serve_file(filepath):
         # URL decode the filepath and normalize it
         from urllib.parse import unquote
         decoded_filepath = unquote(filepath)
-        
+
         # Construct the full path relative to the course directory
         full_path = os.path.join(current_course.path, decoded_filepath)
         full_path = os.path.abspath(full_path)
         course_path = os.path.abspath(current_course.path)
 
-        print(f"File request: {filepath}")
-        print(f"Decoded filepath: {decoded_filepath}")
-        print(f"Full path: {full_path}")
-        print(f"Course path: {course_path}")
-
         # Security check: ensure file is within course directory
         if not full_path.startswith(course_path):
-            print(f"Access denied: {full_path} not in {course_path}")
+            logger.warning(f"Access denied: {full_path} not in {course_path}")
             return "Access denied", 403
 
         if not os.path.exists(full_path):
-            print(f"File not found: {full_path}")
+            logger.warning(f"File not found: {full_path}")
             return "File not found", 404
-
-        print(f"Serving file: {full_path}")
 
         # Determine MIME type
         mime_type, _ = mimetypes.guess_type(full_path)
@@ -716,7 +709,7 @@ def serve_file(filepath):
 
         return send_file(full_path, mimetype=mime_type)
     except Exception as e:
-        print(f"Error serving file: {str(e)}")
+        logger.error(f"Error serving file: {e}")
         return f"Error serving file: {str(e)}", 500
 
 @app.route('/health')

@@ -172,7 +172,7 @@
             // Load text content
             {% for text_file in lesson.text_files %}
             console.log('Loading file: {{ text_file }}');
-            const filePath = '{{ text_file|replace("\\", "/") }}';
+            const filePath = {{ text_file|replace("\\", "/")|tojson }};
             console.log('Encoded file path:', filePath);
             
             // Check if this is an HTML or PDF file
