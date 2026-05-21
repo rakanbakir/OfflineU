@@ -173,6 +173,12 @@ class DynamicCourseParser:
         if ext in VIDEO_EXTENSIONS:
             video_file = relative_path
             lesson_type = 'video'
+            
+            # Auto-detect subtitle files with matching names
+            # Look for files like: video.mp4 -> video.srt, video.vtt, etc.
+            file_stem = file_path.stem
+            subtitle_file = DynamicCourseParser._find_matching_subtitle(file_path.parent, file_stem, course_path)
+            
         elif ext in AUDIO_EXTENSIONS:
             audio_file = relative_path
             lesson_type = 'audio'
@@ -200,6 +206,17 @@ class DynamicCourseParser:
             text_files=text_files,
             order=0
         )
+
+    @staticmethod
+    def _find_matching_subtitle(directory: Path, stem: str, course_path: Path) -> Optional[str]:
+        """Find a subtitle file matching the given stem in the same directory"""
+        for subtitle_ext in SUBTITLE_EXTENSIONS:
+            subtitle_path = directory / f"{stem}{subtitle_ext}"
+            if subtitle_path.exists() and subtitle_path.is_file():
+                # Return the relative path for serving
+                relative_path = str(subtitle_path.relative_to(course_path)).replace('\\', '/')
+                return relative_path
+        return None
 
     @staticmethod
     def _clean_lesson_name(name: str) -> str:
