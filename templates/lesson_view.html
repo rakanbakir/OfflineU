@@ -99,6 +99,110 @@
             text-decoration: none;
             color: inherit;
         }
+
+        /* ── AI Analysis panel ────────────────────────────────────── */
+        .ai-panel {
+            background: #2a2a3d;
+            border: 1px solid #4a4a7a;
+            border-radius: 8px;
+            margin-top: 30px;
+            overflow: hidden;
+        }
+        .ai-panel-header {
+            background: #333355;
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .ai-panel-header h3 {
+            margin: 0;
+            color: #a0a0ff;
+            font-size: 1em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .ai-panel-body {
+            padding: 20px;
+            display: none;
+        }
+        .ai-panel-body.open { display: block; }
+
+        #btn-analyze {
+            background: #5c5cff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+            white-space: nowrap;
+            transition: background 0.2s;
+        }
+        #btn-analyze:hover  { background: #4444ee; }
+        #btn-analyze:disabled { background: #444; cursor: not-allowed; }
+
+        .ai-status {
+            margin-bottom: 14px;
+            font-size: 0.9em;
+            color: #aaa;
+        }
+        .ai-meta {
+            font-size: 0.78em;
+            color: #777;
+            margin-bottom: 16px;
+        }
+        .ai-section { margin-bottom: 20px; }
+        .ai-section h4 {
+            color: #a0a0ff;
+            margin-bottom: 8px;
+            font-size: 0.95em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .ai-summary { line-height: 1.7; color: #ddd; }
+        .ai-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .ai-list li {
+            padding: 6px 10px;
+            background: #333355;
+            border-radius: 4px;
+            margin-bottom: 5px;
+            color: #ccc;
+            font-size: 0.92em;
+            border-left: 3px solid #5c5cff;
+        }
+        .ai-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .ai-tag {
+            background: #3d3d6d;
+            color: #a0a0ff;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 0.82em;
+        }
+        .ai-difficulty {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            text-transform: capitalize;
+        }
+        .ai-difficulty.beginner     { background: #1e4d2b; color: #5dca7a; }
+        .ai-difficulty.intermediate { background: #4d3d00; color: #f0c040; }
+        .ai-difficulty.advanced     { background: #4d1a1a; color: #ff6b6b; }
+        .ai-difficulty.unknown      { background: #333;    color: #999; }
     </style>
 </head>
 <body>
@@ -148,6 +252,25 @@
             </div>
             {% endfor %}
             {% endif %}
+        </div>
+
+        <!-- ── AI Analysis Panel ──────────────────────────────────── -->
+        <div class="ai-panel" id="ai-panel">
+            <div class="ai-panel-header" onclick="toggleAiPanel()">
+                <h3>🤖 AI Analysis</h3>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <button id="btn-analyze" onclick="event.stopPropagation(); runAnalysis()">
+                        Analyze with AI
+                    </button>
+                    <span id="ai-panel-toggle" style="color:#a0a0ff;font-size:1.2em;">▶</span>
+                </div>
+            </div>
+            <div class="ai-panel-body" id="ai-panel-body">
+                <div class="ai-status" id="ai-status">
+                    Click <strong>Analyze with AI</strong> to generate a summary, key points, and notes for this lesson.
+                </div>
+                <div id="ai-result"></div>
+            </div>
         </div>
 
         <div class="nav-buttons">
@@ -363,6 +486,130 @@
             // Set completed state if already completed
             if ({{ 'true' if lesson.completed else 'false' }}) {
                 markAsCompleted();
+            }
+
+            // ── AI Analysis ─────────────────────────────────────────────────
+
+            function toggleAiPanel() {
+                const body   = document.getElementById('ai-panel-body');
+                const toggle = document.getElementById('ai-panel-toggle');
+                const open   = body.classList.toggle('open');
+                toggle.textContent = open ? '▼' : '▶';
+                if (open && !document.getElementById('ai-result').hasChildNodes()) {
+                    loadExistingAnalysis();
+                }
+            }
+
+            function loadExistingAnalysis() {
+                const path = encodeURIComponent(LESSON_PATH);
+                fetch('/api/ai/analysis?lesson_path=' + path)
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success && data.analysis) {
+                            renderAnalysis(data.analysis);
+                        }
+                    })
+                    .catch(() => {});
+            }
+
+            function runAnalysis() {
+                const btn    = document.getElementById('btn-analyze');
+                const status = document.getElementById('ai-status');
+                const result = document.getElementById('ai-result');
+                const body   = document.getElementById('ai-panel-body');
+                const toggle = document.getElementById('ai-panel-toggle');
+
+                // Ensure panel is open
+                body.classList.add('open');
+                toggle.textContent = '▼';
+
+                btn.disabled = true;
+                btn.textContent = 'Analyzing…';
+                status.innerHTML = '<span style="color:#a0a0ff">⏳ Sending to AI provider…</span>';
+                result.innerHTML = '';
+
+                fetch('/api/ai/analyze', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({lesson_path: LESSON_PATH})
+                })
+                .then(r => r.json())
+                .then(data => {
+                    btn.disabled = false;
+                    btn.textContent = 'Re-analyze';
+                    if (data.success && data.analysis) {
+                        status.innerHTML = '<span style="color:#5dca7a">✓ Analysis complete</span>';
+                        renderAnalysis(data.analysis);
+                    } else {
+                        const msg = data.error || 'Unknown error';
+                        status.innerHTML = `<span style="color:#ff6b6b">⚠ ${escapeHtml(msg)}</span>`;
+                        if (msg.toLowerCase().includes('not configured')) {
+                            status.innerHTML +=
+                                ' — <a href="/" style="color:#a0a0ff">Go to dashboard to configure AI settings</a>';
+                        }
+                    }
+                })
+                .catch(err => {
+                    btn.disabled = false;
+                    btn.textContent = 'Retry';
+                    status.innerHTML = `<span style="color:#ff6b6b">⚠ Request failed: ${escapeHtml(err.message)}</span>`;
+                });
+            }
+
+            function renderAnalysis(a) {
+                const meta = a._metadata || {};
+                const diff = (a.difficulty_level || 'unknown').toLowerCase();
+
+                const mkList = (arr) => Array.isArray(arr) && arr.length
+                    ? '<ul class="ai-list">' + arr.map(i => `<li>${escapeHtml(String(i))}</li>`).join('') + '</ul>'
+                    : '<p style="color:#666;font-size:.9em">—</p>';
+
+                const mkTags = (arr) => Array.isArray(arr) && arr.length
+                    ? '<div class="ai-tags">' + arr.map(t => `<span class="ai-tag">${escapeHtml(String(t))}</span>`).join('') + '</div>'
+                    : '<p style="color:#666;font-size:.9em">—</p>';
+
+                let html = '';
+
+                if (meta.analyzed_at) {
+                    html += `<div class="ai-meta">
+                        Analyzed by <strong>${escapeHtml(meta.provider || '')} / ${escapeHtml(meta.model || '')}</strong>
+                        &nbsp;·&nbsp; ${new Date(meta.analyzed_at).toLocaleString()}
+                        &nbsp;·&nbsp; Source: ${escapeHtml(meta.context_source || '')}
+                    </div>`;
+                }
+
+                if (a.summary) {
+                    html += `<div class="ai-section">
+                        <h4>Summary</h4>
+                        <div class="ai-summary">${escapeHtml(a.summary).replace(/\n/g,'<br>')}</div>
+                    </div>`;
+                }
+
+                html += `<div class="ai-section" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+                    <div>
+                        <h4 style="display:inline;">Difficulty</h4>&nbsp;
+                        <span class="ai-difficulty ${diff}">${escapeHtml(diff)}</span>
+                    </div>
+                </div>`;
+
+                html += `<div class="ai-section"><h4>Key Points</h4>${mkList(a.key_points)}</div>`;
+                html += `<div class="ai-section"><h4>Notes</h4>${mkList(a.notes)}</div>`;
+                html += `<div class="ai-section"><h4>Takeaways</h4>${mkList(a.takeaways)}</div>`;
+                html += `<div class="ai-section"><h4>Topics</h4>${mkTags(a.topics)}</div>`;
+
+                if (Array.isArray(a.prerequisites) && a.prerequisites.length) {
+                    html += `<div class="ai-section"><h4>Prerequisites</h4>${mkList(a.prerequisites)}</div>`;
+                }
+
+                document.getElementById('ai-result').innerHTML = html;
+            }
+
+            function escapeHtml(str) {
+                return String(str)
+                    .replace(/&/g,'&amp;')
+                    .replace(/</g,'&lt;')
+                    .replace(/>/g,'&gt;')
+                    .replace(/"/g,'&quot;');
             }
         </script>
     </div>

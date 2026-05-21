@@ -17,6 +17,7 @@ from datetime import datetime
 from dataclasses import dataclass, asdict
 from typing import List, Dict, Optional, Any, Tuple
 from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for
+from ai_analyzer import AIAnalyzer, AI_PROVIDERS
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
@@ -723,6 +724,126 @@ def reset_course():
     global current_course
     current_course = None
     return redirect(url_for('index'))
+
+
+# ---------------------------------------------------------------------------
+# AI configuration helpers
+# ---------------------------------------------------------------------------
+
+_AI_CONFIG_FILE = Path('data/ai_config.json')
+
+
+def _load_ai_config() -> Dict[str, Any]:
+    try:
+        if _AI_CONFIG_FILE.exists():
+            return json.loads(_AI_CONFIG_FILE.read_text(encoding='utf-8'))
+    except Exception:
+        pass
+    return {'provider': '', 'model': '', 'api_key': '', 'base_url': ''}
+
+
+def _save_ai_config(config: Dict[str, Any]) -> None:
+    _AI_CONFIG_FILE.parent.mkdir(exist_ok=True)
+    _AI_CONFIG_FILE.write_text(json.dumps(config, indent=2), encoding='utf-8')
+
+
+# ---------------------------------------------------------------------------
+# AI routes
+# ---------------------------------------------------------------------------
+
+@app.route('/api/ai/providers', methods=['GET'])
+def get_ai_providers():
+    """Return the catalogue of supported AI providers and their models."""
+    return jsonify(AI_PROVIDERS)
+
+
+@app.route('/api/ai/config', methods=['GET'])
+def get_ai_config():
+    """Return current AI configuration (API key masked)."""
+    config = _load_ai_config()
+    safe = dict(config)
+    if safe.get('api_key'):
+        safe['api_key'] = '***'
+        safe['api_key_set'] = True
+    else:
+        safe['api_key_set'] = False
+    return jsonify(safe)
+
+
+@app.route('/api/ai/config', methods=['POST'])
+def update_ai_config():
+    """Save AI provider/model configuration."""
+    data = request.json or {}
+    config = _load_ai_config()
+    for field in ('provider', 'model', 'base_url'):
+        if field in data:
+            config[field] = data[field]
+    # Only update api_key when a real (non-masked) value is provided
+    new_key = data.get('api_key', '')
+    if new_key and new_key != '***':
+        config['api_key'] = new_key
+    _save_ai_config(config)
+    return jsonify({'success': True})
+
+
+@app.route('/api/ai/analyze', methods=['POST'])
+def analyze_lesson_ai():
+    """Trigger AI analysis for a lesson and persist the result."""
+    global current_course
+
+    if not current_course:
+        return jsonify({'error': 'No course loaded'}), 400
+
+    data = request.json or {}
+    lesson_path = data.get('lesson_path', '').strip()
+    if not lesson_path:
+        return jsonify({'error': 'lesson_path is required'}), 400
+
+    lesson = find_lesson_in_tree(current_course.root_node, lesson_path)
+    if not lesson:
+        return jsonify({'error': 'Lesson not found'}), 404
+
+    config = _load_ai_config()
+    if not config.get('provider') or not config.get('model'):
+        return jsonify({
+            'error': 'AI provider and model are not configured. '
+                     'Open AI Settings and choose a provider + model.'
+        }), 400
+
+    try:
+        analyzer = AIAnalyzer(config)
+        analysis = analyzer.analyze_lesson(lesson, current_course.path)
+        canonical = os.path.relpath(lesson.path, current_course.path).replace('\\', '/')
+        AIAnalyzer.save_analysis(current_course.path, canonical, analysis)
+        logger.info(f"AI analysis saved for: {canonical}")
+        return jsonify({'success': True, 'analysis': analysis})
+    except (ImportError, ValueError) as exc:
+        logger.warning(f"AI config error: {exc}")
+        return jsonify({'error': str(exc)}), 400
+    except (ConnectionError, PermissionError, RuntimeError) as exc:
+        logger.warning(f"AI provider error: {exc}")
+        return jsonify({'error': str(exc)}), 400
+    except Exception as exc:
+        logger.error(f"AI analysis unexpected error: {exc}", exc_info=True)
+        return jsonify({'error': f"Unexpected error: {exc}"}), 500
+
+
+@app.route('/api/ai/analysis', methods=['GET'])
+def get_lesson_analysis():
+    """Return a previously stored AI analysis for a lesson."""
+    global current_course
+
+    if not current_course:
+        return jsonify({'error': 'No course loaded'}), 400
+
+    lesson_path = request.args.get('lesson_path', '').strip()
+    if not lesson_path:
+        return jsonify({'error': 'lesson_path is required'}), 400
+
+    analysis = AIAnalyzer.load_analysis(current_course.path, lesson_path)
+    if analysis:
+        return jsonify({'success': True, 'analysis': analysis})
+    return jsonify({'success': False, 'analysis': None})
 
 
 def create_templates():

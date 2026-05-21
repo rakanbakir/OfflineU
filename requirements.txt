@@ -5,3 +5,13 @@ itsdangerous==2.2.0
 jinja2==3.1.6
 markupsafe==3.0.2
 werkzeug==3.1.3
+
+# ── AI providers ─────────────────────────────────────────────────────────────
+# Required for: OpenAI, GitHub Copilot, Ollama, and any OpenAI-compatible API
+openai>=1.78.0
+
+# Required for: Anthropic Claude
+anthropic>=0.52.0
+
+# Required for: Google Gemini
+google-generativeai>=0.8.0

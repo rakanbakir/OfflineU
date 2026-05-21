@@ -341,6 +341,60 @@
                 margin-left: 15px;
             }
         }
+
+        /* ── AI Settings Modal ─────────────────────────────────────── */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal {
+            background: #2d2d2d;
+            border: 1px solid #444;
+            border-radius: 10px;
+            padding: 30px;
+            width: min(560px, 95vw);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .modal h2 { color: #a0a0ff; margin-bottom: 20px; }
+        .modal label {
+            display: block;
+            color: #ccc;
+            font-size: .9em;
+            margin-bottom: 4px;
+            margin-top: 14px;
+        }
+        .modal select, .modal input[type=text], .modal input[type=password] {
+            width: 100%;
+            background: #3d3d3d;
+            border: 1px solid #555;
+            color: #e0e0e0;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: .95em;
+        }
+        .modal select:focus,
+        .modal input:focus { outline: none; border-color: #5c5cff; }
+        .modal-footer {
+            display: flex;
+            gap: 10px;
+            margin-top: 24px;
+            justify-content: flex-end;
+        }
+        .btn-ai { background: #5c5cff; }
+        .btn-ai:hover { background: #4444ee; }
+        .ai-hint {
+            font-size: .8em;
+            color: #888;
+            margin-top: 4px;
+        }
+        #ai-save-status { font-size:.9em; }
     </style>
 </head>
 <body>
@@ -358,6 +412,50 @@
                 <span style="color: #666; margin-left: auto;">
                     {{ stats.total_lessons }} lessons
                 </span>
+                <button class="btn btn-ai" style="padding:8px 14px;font-size:.85em;" onclick="openAiSettings()">
+                    🤖 AI Settings
+                </button>
+            </div>
+        </div>
+
+        <!-- ── AI Settings Modal ──────────────────────────────────── -->
+        <div class="modal-overlay" id="ai-modal" onclick="closeAiIfOverlay(event)">
+            <div class="modal">
+                <h2>🤖 AI Settings</h2>
+
+                <label for="ai-provider">Provider</label>
+                <select id="ai-provider" onchange="onProviderChange()">
+                    <option value="">— select a provider —</option>
+                </select>
+
+                <label for="ai-model">Model</label>
+                <select id="ai-model">
+                    <option value="">— select a model —</option>
+                </select>
+                <p class="ai-hint" id="ai-model-hint">Choose a provider first.</p>
+
+                <div id="ai-apikey-row">
+                    <label for="ai-apikey">API Key</label>
+                    <input type="password" id="ai-apikey" placeholder="sk-… or leave blank if not required">
+                    <p class="ai-hint" id="ai-apikey-hint"></p>
+                </div>
+
+                <div id="ai-baseurl-row">
+                    <label for="ai-baseurl">Base URL <span style="color:#777;font-size:.85em">(optional override / Ollama endpoint)</span></label>
+                    <input type="text" id="ai-baseurl" placeholder="http://localhost:11434">
+                    <p class="ai-hint">Leave blank to use the default endpoint.</p>
+                </div>
+
+                <div id="ai-custommodel-row" style="display:none;">
+                    <label for="ai-custommodel">Custom Model Name</label>
+                    <input type="text" id="ai-custommodel" placeholder="e.g. llama3.2 or gpt-4o">
+                </div>
+
+                <div class="modal-footer">
+                    <span id="ai-save-status"></span>
+                    <button class="btn btn-secondary" onclick="closeAiSettings()">Cancel</button>
+                    <button class="btn btn-ai" onclick="saveAiSettings()">Save</button>
+                </div>
             </div>
         </div>
 
@@ -638,6 +736,129 @@
                 pathInput.focus();
             }
         });
+
+        // ── AI Settings ──────────────────────────────────────────────────
+
+        let _aiProviders = {};
+        let _aiCurrentConfig = {};
+
+        function openAiSettings() {
+            const modal = document.getElementById('ai-modal');
+            modal.classList.add('open');
+            // Load providers catalogue + current config in parallel
+            Promise.all([
+                fetch('/api/ai/providers').then(r => r.json()),
+                fetch('/api/ai/config').then(r => r.json()),
+            ]).then(([providers, config]) => {
+                _aiProviders = providers;
+                _aiCurrentConfig = config;
+                populateProviders(providers, config);
+            }).catch(err => console.error('AI settings load error:', err));
+        }
+
+        function closeAiSettings() {
+            document.getElementById('ai-modal').classList.remove('open');
+            document.getElementById('ai-save-status').textContent = '';
+        }
+
+        function closeAiIfOverlay(evt) {
+            if (evt.target === document.getElementById('ai-modal')) closeAiSettings();
+        }
+
+        function populateProviders(providers, config) {
+            const sel = document.getElementById('ai-provider');
+            sel.innerHTML = '<option value="">— select a provider —</option>';
+            Object.entries(providers).forEach(([key, info]) => {
+                const opt = document.createElement('option');
+                opt.value = key;
+                opt.textContent = info.name;
+                if (key === config.provider) opt.selected = true;
+                sel.appendChild(opt);
+            });
+            onProviderChange(config.model, config.api_key_set, config.base_url);
+        }
+
+        function onProviderChange(savedModel, apiKeySet, savedBaseUrl) {
+            const provKey   = document.getElementById('ai-provider').value;
+            const modelSel  = document.getElementById('ai-model');
+            const hint      = document.getElementById('ai-model-hint');
+            const apikeyRow = document.getElementById('ai-apikey-row');
+            const baseurlRow = document.getElementById('ai-baseurl-row');
+            const customRow  = document.getElementById('ai-custommodel-row');
+            const apikeyHint = document.getElementById('ai-apikey-hint');
+
+            modelSel.innerHTML = '<option value="">— select a model —</option>';
+
+            if (!provKey || !_aiProviders[provKey]) {
+                hint.textContent = 'Choose a provider first.';
+                return;
+            }
+
+            const info = _aiProviders[provKey];
+
+            // Models
+            if (info.models && info.models.length) {
+                info.models.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m;
+                    opt.textContent = m;
+                    if (m === savedModel) opt.selected = true;
+                    modelSel.appendChild(opt);
+                });
+                customRow.style.display = 'none';
+                hint.textContent = info.install_hint || '';
+            } else {
+                // openai_compatible or no predefined models
+                customRow.style.display = 'block';
+                if (savedModel) document.getElementById('ai-custommodel').value = savedModel;
+                hint.textContent = 'Enter a custom model name below.';
+            }
+
+            // API key
+            apikeyRow.style.display = info.requires_api_key !== false ? 'block' : 'block';
+            if (apiKeySet) {
+                document.getElementById('ai-apikey').placeholder = '••••••• (already saved — paste to change)';
+            } else {
+                document.getElementById('ai-apikey').placeholder = 'Paste your API key';
+            }
+            apikeyHint.textContent = info.install_hint || '';
+
+            // Base URL
+            const bu = savedBaseUrl || info.base_url || '';
+            document.getElementById('ai-baseurl').value = bu;
+        }
+
+        function saveAiSettings() {
+            const provider = document.getElementById('ai-provider').value;
+            let model = document.getElementById('ai-model').value;
+            if (!model) model = document.getElementById('ai-custommodel').value.trim();
+            const apiKey  = document.getElementById('ai-apikey').value.trim();
+            const baseUrl = document.getElementById('ai-baseurl').value.trim();
+            const status  = document.getElementById('ai-save-status');
+
+            if (!provider) { status.innerHTML = '<span style="color:#ff6b6b">Select a provider.</span>'; return; }
+            if (!model)     { status.innerHTML = '<span style="color:#ff6b6b">Select or enter a model.</span>'; return; }
+
+            status.innerHTML = '<span style="color:#a0a0ff">Saving…</span>';
+
+            fetch('/api/ai/config', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({provider, model, api_key: apiKey, base_url: baseUrl}),
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    status.innerHTML = '<span style="color:#5dca7a">✓ Saved!</span>';
+                    setTimeout(closeAiSettings, 800);
+                } else {
+                    status.innerHTML = `<span style="color:#ff6b6b">${data.error || 'Error'}</span>`;
+                }
+            })
+            .catch(err => {
+                status.innerHTML = `<span style="color:#ff6b6b">Request failed: ${err.message}</span>`;
+            });
+        }
     </script>
 </body>
 </html>
