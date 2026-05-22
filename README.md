@@ -14,6 +14,8 @@
 * ♻️ **Continue where you left off**: Resume instantly from your last-accessed lesson.
 * 💾 **Local-first & private**: 100% offline. No cloud, no tracking, no nonsense.
 * 🧑‍💻 **Works with any course format**: No metadata required, just structured folders.
+* 📊 **AI-powered lesson analysis**: Optional integration with OpenAI, Anthropic, Google Gemini, or local Ollama for automatic lesson summaries and analysis.
+* 📝 **Comprehensive logging**: All activities are logged with date-based filenames for easy tracking and debugging.
 * 🧠 **Ideal for hoarders, students, or offline learning setups**
 
 ---
@@ -105,7 +107,51 @@ MyCourse/
 
 ---
 
-## 💡 Tips & Tricks
+## 🤖 AI-Powered Lesson Analysis (Optional)
+
+OfflineU integrates with multiple AI providers to automatically analyze and summarize your lessons:
+
+### Supported AI Providers
+
+| Provider        | Models                                          | Setup                          |
+| --------------- | ----------------------------------------------- | ------------------------------ |
+| **OpenAI**      | GPT-4o, GPT-4o-mini, GPT-4-turbo, GPT-3.5      | Requires API key               |
+| **Anthropic**   | Claude Opus 4.5, Claude Sonnet, Claude Haiku    | Requires API key               |
+| **Google**      | Gemini 1.5 Pro, Flash, 2.0 Flash               | Requires API key               |
+| **Ollama**      | Local models (Llama, Mistral, Phi, etc.)        | No API key, runs locally       |
+| **GitHub Copilot** | GPT-4o, Claude, O1, Gemini 2.0                 | Requires GitHub PAT            |
+
+### Features
+
+- 📋 Automatic lesson summaries
+- 🔑 Key points extraction
+- 📚 Topic identification
+- 🎯 Difficulty level assessment
+- ⚙️ Prerequisites detection
+- 💡 Learning takeaways
+
+### Usage
+
+Use the `ai_analyzer.py` script to analyze lessons programmatically or integrate AI capabilities into your workflow.
+
+---
+
+## 📝 Logging
+
+All activities are automatically logged to the `logs/` directory with **date-based filenames** for easy organization:
+
+- **Log files**: `offlineu_YYYY-MM-DD.log` (e.g., `offlineu_2026-05-22.log`)
+- **Automatic rotation**: Logs are rotated when they exceed 5MB
+- **History retention**: Up to 10 backup log files are maintained
+- **Format**: Each entry includes timestamp, log level, and message
+
+Check logs to track:
+- Application startup and errors
+- Course loading activities
+- Progress updates
+- API calls and responses
+
+---
 
 - **Organize by chapters**: Create folders for each section or chapter for better navigation
 - **Use descriptive names**: Prefix videos with numbers (e.g., `01 - Intro.mp4`, `02 - Setup.mp4`)

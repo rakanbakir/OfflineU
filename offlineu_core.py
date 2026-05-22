@@ -22,14 +22,16 @@ from ai_analyzer import AIAnalyzer, AI_PROVIDERS
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
 
-# Set up logging to logs/ folder
+# Set up logging to logs/ folder with date in filename
 _logs_dir = Path('logs')
 _logs_dir.mkdir(exist_ok=True)
+_log_date = datetime.now().strftime('%Y-%m-%d')
+_log_filename = f'logs/offlineu_{_log_date}.log'
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[
-        RotatingFileHandler('logs/offlineu.log', maxBytes=5_000_000, backupCount=3),
+        RotatingFileHandler(_log_filename, maxBytes=5_000_000, backupCount=10),
         logging.StreamHandler()
     ]
 )
