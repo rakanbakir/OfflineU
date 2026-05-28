@@ -381,6 +381,7 @@
             }
 
             const LESSON_PATH = {{ lesson_path | tojson }};
+            const NEXT_LESSON = {{ next_lesson | tojson }};
 
             function saveProgress(progressSeconds, completed = false) {
                 fetch('/api/progress', {
@@ -410,7 +411,14 @@
                     btn.disabled = true;
                 }
                 isCompleted = true;
-                showNotification('Lesson marked as completed!', 'success');
+                if (NEXT_LESSON) {
+                    showNotification('Lesson completed! Going to next lesson…', 'success');
+                    setTimeout(() => {
+                        window.location.href = '/lesson/' + NEXT_LESSON;
+                    }, 2000);
+                } else {
+                    showNotification('Lesson marked as completed!', 'success');
+                }
             }
 
             function showNotification(message, type = 'info') {
@@ -537,7 +545,7 @@
                 .then(data => {
                     btn.disabled = false;
                     btn.textContent = 'Re-analyze';
-                    if (data.success && data.analysis) {
+                    if (data.success && data.analysis) {∆
                         status.innerHTML = '<span style="color:#5dca7a">✓ Analysis complete</span>';
                         renderAnalysis(data.analysis);
                     } else {
