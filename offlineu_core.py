@@ -580,8 +580,16 @@ def view_lesson(lesson_path: str):
     if progress_lesson_path.startswith('/'):
         progress_lesson_path = progress_lesson_path[1:]
 
-    # Update last accessed
-    ProgressTracker.update_lesson_progress(current_course, progress_lesson_path)
+    # Update last accessed (preserve existing completion status)
+    existing_progress = ProgressTracker.load_progress(current_course)
+    existing_lesson = existing_progress.get(progress_lesson_path, {})
+    was_completed = existing_lesson.get('completed', False)
+    existing_seconds = existing_lesson.get('progress_seconds', 0)
+    ProgressTracker.update_lesson_progress(
+        current_course, progress_lesson_path,
+        completed=was_completed,
+        progress_seconds=existing_seconds
+    )
 
     return render_template('lesson_view.html',
                            course=current_course,
