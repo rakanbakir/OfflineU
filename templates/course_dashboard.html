@@ -508,9 +508,10 @@
                         
                         {% for lesson in node.lessons %}
                         {% set lesson_relative_path = lesson.path|replace('\\', '/')|replace(course.path|replace('\\', '/'), '')|replace('//', '/')|replace('/', '', 1) %}
+                        {% set lesson_url = lesson_relative_path + '/' + lesson.title|replace(' ', '_') %}
                         <div class="lesson-item {% if lesson.completed %}completed{% endif %}"
-                             onclick="window.location.href='/lesson/{{ lesson_relative_path }}/{{ lesson.title|replace(' ', '_') }}'">
-                            <div class="lesson-title">
+                             data-lesson-path="{{ lesson_relative_path }}">
+                            <div class="lesson-title" onclick="window.location.href='/lesson/{{ lesson_url }}'">
                                 <span class="lesson-icon">
                                     {% if lesson.lesson_type == 'video' %}🎥
                                     {% elif lesson.lesson_type == 'audio' %}🎵
@@ -522,11 +523,12 @@
                             </div>
                             <div class="lesson-meta">
                                 <span class="lesson-type {{ lesson.lesson_type }}">{{ lesson.lesson_type|title }}</span>
-                                {% if lesson.completed %}
-                                <span class="status-icon completed">✓</span>
-                                {% else %}
-                                <span class="status-icon pending">○</span>
-                                {% endif %}
+                                <span class="status-icon {% if lesson.completed %}completed{% else %}pending{% endif %}"
+                                      onclick="event.stopPropagation(); toggleLessonComplete(this, '{{ lesson_relative_path }}')"
+                                      title="{% if lesson.completed %}Click to un-mark{% else %}Click to mark complete{% endif %}"
+                                      style="cursor: pointer;">
+                                    {% if lesson.completed %}✓{% else %}○{% endif %}
+                                </span>
                             </div>
                         </div>
                         {% endfor %}
@@ -648,12 +650,12 @@
                     statusDiv.innerHTML = '<p style="color: #28a745;">Course loaded successfully! Redirecting...</p>';
                     setTimeout(() => location.reload(), 1000);
                 } else {
-                    statusDiv.innerHTML = `<p style="color: #ff6b6b;">Error: ${data.error}</p>`;
+                    statusDiv.innerHTML = `<p style="color: #ff6b6b;">${data.error}</p>`;
                 }
             })
             .catch(error => {
                 console.error('Error loading course:', error);
-                statusDiv.innerHTML = '<p style="color: #ff6b6b;">Error loading course. Please check the path and try again.</p>';
+                statusDiv.innerHTML = '<p style="color: #ff6b6b;">Error loading course. Check the path and try again, or use the Browse button.</p>';
             });
         }
 
@@ -712,7 +714,10 @@
                                     statusDiv.innerHTML = '<p style="color: #28a745;">Course loaded successfully! Redirecting...</p>';
                                     setTimeout(() => location.reload(), 1000);
                                 } else {
-                                    statusDiv.innerHTML = `<p style="color: #ff6b6b;">Error: ${data.error}</p>`;
+                                    statusDiv.innerHTML = `<p style="color: #ff6b6b;">${data.error}</p>
+                                        <p style="color: #999; font-size: 0.85em; margin-top: 8px;">
+                                            💡 Try typing the full path manually (e.g., /Users/username/Downloads/${rootFolder})
+                                        </p>`;
                                     selectedFolderSpan.innerHTML = `📁 ${rootFolder} - <span style="color: #ff6b6b;">Failed to load</span>`;
                                 }
                             })
@@ -858,6 +863,46 @@
             .catch(err => {
                 status.innerHTML = `<span style="color:#ff6b6b">Request failed: ${err.message}</span>`;
             });
+        }
+
+        // ── Toggle lesson completion from dashboard ─────────────────────
+
+        function toggleLessonComplete(statusIcon, lessonPath) {
+            const lessonItem = statusIcon.closest('.lesson-item');
+            const isCurrentlyCompleted = lessonItem.classList.contains('completed');
+
+            const newCompleted = !isCurrentlyCompleted;
+
+            fetch('/api/progress', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    lesson_path: lessonPath,
+                    completed: newCompleted,
+                    progress_seconds: 0
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    if (newCompleted) {
+                        lessonItem.classList.add('completed');
+                        statusIcon.classList.remove('pending');
+                        statusIcon.classList.add('completed');
+                        statusIcon.textContent = '✓';
+                        statusIcon.title = 'Click to un-mark';
+                    } else {
+                        lessonItem.classList.remove('completed');
+                        statusIcon.classList.remove('completed');
+                        statusIcon.classList.add('pending');
+                        statusIcon.textContent = '○';
+                        statusIcon.title = 'Click to mark complete';
+                    }
+                    // Refresh the page to update progress stats
+                    setTimeout(() => location.reload(), 500);
+                }
+            })
+            .catch(err => console.error('Failed to toggle lesson:', err));
         }
     </script>
 </body>

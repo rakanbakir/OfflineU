@@ -482,6 +482,86 @@ def browse_directories():
         return jsonify({'error': str(e)}), 500
 
 
+def _search_folder_system_wide(folder_name: str) -> Optional[str]:
+    """Search for a folder by name across the system.
+    Uses mdfind (Spotlight) on macOS, find on Linux, or recursive walk as fallback.
+    """
+    import subprocess
+    import platform
+
+    system = platform.system()
+
+    if system == 'Darwin':
+        # macOS: use Spotlight (mdfind) — fast and searches everywhere
+        try:
+            # Simple text search via mdfind — no query syntax to break on special chars
+            result = subprocess.run(
+                ['mdfind', '-onlyin', os.path.expanduser('~'),
+                 f"kMDItemKind == 'Folder' && kMDItemDisplayName == '{folder_name}'c"],
+                capture_output=True, text=True, timeout=15
+            )
+            lines = [l.strip() for l in result.stdout.splitlines() if l.strip()]
+            for line in lines:
+                if os.path.isdir(line) and os.path.basename(line) == folder_name:
+                    logger.info(f"Found folder via Spotlight (home): {line}")
+                    return line
+
+            # Also try external volumes
+            result = subprocess.run(
+                ['mdfind', '-onlyin', '/Volumes',
+                 f"kMDItemKind == 'Folder' && kMDItemDisplayName == '{folder_name}'c"],
+                capture_output=True, text=True, timeout=10
+            )
+            lines = [l.strip() for l in result.stdout.splitlines() if l.strip()]
+            for line in lines:
+                if os.path.isdir(line) and os.path.basename(line) == folder_name:
+                    logger.info(f"Found folder via Spotlight (Volumes): {line}")
+                    return line
+        except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
+            logger.warning(f"Spotlight search failed: {e}")
+
+    # Fallback: use find (works on macOS and Linux)
+    try:
+        search_roots = [
+            os.path.expanduser('~'),
+        ]
+        for root in search_roots:
+            if not os.path.isdir(root):
+                continue
+            result = subprocess.run(
+                ['find', root, '-maxdepth', '6', '-type', 'd',
+                 '-name', folder_name, '-not', '-path', '*/\\.*', '-print', '-quit'],
+                capture_output=True, text=True, timeout=30
+            )
+            line = result.stdout.strip()
+            if line and os.path.isdir(line):
+                logger.info(f"Found folder via find: {line}")
+                return line
+    except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
+        logger.warning(f"find search failed: {e}")
+
+    # Last resort: walk common directories (limited depth, breadth-first)
+    search_roots = [
+        os.path.expanduser('~/Downloads'),
+        os.path.expanduser('~/Documents'),
+        os.path.expanduser('~/Desktop'),
+        os.path.expanduser('~/Courses'),
+    ]
+    for root in search_roots:
+        if not os.path.isdir(root):
+            continue
+        try:
+            for entry in os.listdir(root):
+                full = os.path.join(root, entry)
+                if entry == folder_name and os.path.isdir(full):
+                    logger.info(f"Found folder via walk: {full}")
+                    return full
+        except (PermissionError, OSError):
+            continue
+
+    return None
+
+
 @app.route('/load_course', methods=['POST'])
 def load_course():
     """Load course from selected directory"""
@@ -492,6 +572,8 @@ def load_course():
 
     if not course_path:
         return jsonify({'error': 'Course path is required'}), 400
+
+    logger.info(f"Attempting to load course from: {course_path!r}")
 
     # If it's not an absolute path or doesn't exist, try to find it
     if not os.path.exists(course_path):
@@ -512,13 +594,19 @@ def load_course():
                 found_path = path
                 break
         
+        # If still not found, try system-wide search
+        if not found_path:
+            logger.info(f"Not found in common paths, trying system-wide search for: {course_path!r}")
+            found_path = _search_folder_system_wide(course_path)
+
         if not found_path:
             return jsonify({
-                'error': f'Course folder not found: "{course_path}". Try providing the full absolute path.',
-                'searched_locations': common_paths[:3]  # Show the main ones tried
+                'error': f'Course folder not found: "{course_path}". Try providing the full absolute path (e.g., /Users/username/Downloads/{course_path}).',
+                'searched_locations': common_paths[:3]
             }), 400
         
         course_path = found_path
+        logger.info(f"Resolved course path to: {course_path}")
 
     try:
         current_course = DynamicCourseParser.scan_directory(course_path)

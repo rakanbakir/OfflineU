@@ -215,7 +215,7 @@
         
         <div class="navigation">
             <a href="/" style="text-decoration: none; color: #007acc;">← Back to Course</a>
-            <button onclick="markCompleted()">Mark as Completed</button>
+            <button id="btn-complete" onclick="toggleCompleted()">Mark as Completed</button>
         </div>
 
         <div class="content">
@@ -370,6 +370,8 @@
                 activeMedia.addEventListener('ended', function() {
                     saveProgress(activeMedia.currentTime, true);
                     markAsCompleted();
+                    // Reset for potential replay — don't auto-navigate if already completed
+                    isCompleted = true;
                 });
 
                 // Resume from saved position
@@ -395,20 +397,25 @@
                 }).catch(err => console.error('Failed to save progress:', err));
             }
 
-            function markCompleted() {
-                if (isCompleted) return;
-
-                const currentTime = activeMedia ? activeMedia.currentTime : 0;
-                saveProgress(currentTime, true);
-                markAsCompleted();
+            function toggleCompleted() {
+                if (isCompleted) {
+                    // Un-mark the lesson
+                    const currentTime = activeMedia ? activeMedia.currentTime : 0;
+                    saveProgress(currentTime, false);
+                    markAsIncomplete();
+                } else {
+                    // Mark the lesson as completed
+                    const currentTime = activeMedia ? activeMedia.currentTime : 0;
+                    saveProgress(currentTime, true);
+                    markAsCompleted();
+                }
             }
 
             function markAsCompleted() {
-                const btn = document.querySelector('button[onclick="markCompleted()"]');
+                const btn = document.getElementById('btn-complete');
                 if (btn) {
-                    btn.textContent = 'Completed ✓';
-                    btn.style.background = '#28a745';
-                    btn.disabled = true;
+                    btn.textContent = 'Mark as Incomplete';
+                    btn.style.background = '#dc3545';
                 }
                 isCompleted = true;
                 if (NEXT_LESSON) {
@@ -419,6 +426,16 @@
                 } else {
                     showNotification('Lesson marked as completed!', 'success');
                 }
+            }
+
+            function markAsIncomplete() {
+                const btn = document.getElementById('btn-complete');
+                if (btn) {
+                    btn.textContent = 'Mark as Completed';
+                    btn.style.background = '#007acc';
+                }
+                isCompleted = false;
+                showNotification('Lesson marked as incomplete', 'info');
             }
 
             function showNotification(message, type = 'info') {
@@ -492,9 +509,9 @@
             });
 
             // Set completed state if already completed
-            if ({{ 'true' if lesson.completed else 'false' }}) {
-                markAsCompleted();
-            }
+            {% if lesson.completed %}
+            markAsCompleted();
+            {% endif %}
 
             // ── AI Analysis ─────────────────────────────────────────────────
 
