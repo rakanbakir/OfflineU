@@ -4,7 +4,81 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% if course %}{{ course.name }} - OfflineU{% else %}OfflineU{% endif %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        /* ── Design Tokens ─────────────────────────────────────────── */
+        :root {
+            --color-bg:        #0f1117;
+            --color-surface:   #1a1d27;
+            --color-elevated:  #22262f;
+            --color-border:    rgba(255,255,255,.06);
+            --color-text:      #e4e6ed;
+            --color-text-2nd:  #8b8fa3;
+            --color-text-muted:#5b5f6b;
+            --color-accent:    #3b82f6;
+            --color-accent-hv: #2563eb;
+            --color-success:   #22c55e;
+            --color-success-bg:rgba(34,197,94,.12);
+            --color-danger:    #ef4444;
+            --color-type-video:#ef4444;
+            --color-type-audio:#a855f7;
+            --color-type-text: #64748b;
+            --color-type-quiz: #f59e0b;
+            --color-type-mixed:#10b981;
+
+            --font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            --font-mono:    'SF Mono', 'Fira Code', 'Courier New', monospace;
+            --font-size-xs: .75rem;
+            --font-size-sm: .85rem;
+            --font-size-md: .95rem;
+            --font-size-lg: 1.15rem;
+            --font-size-xl: 1.5rem;
+            --font-size-2xl:2rem;
+            --font-weight-normal:400;
+            --font-weight-medium:500;
+            --font-weight-semibold:600;
+            --font-weight-bold:700;
+
+            --space-1: 4px;
+            --space-2: 8px;
+            --space-3: 12px;
+            --space-4: 16px;
+            --space-5: 20px;
+            --space-6: 24px;
+            --space-8: 32px;
+
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 14px;
+            --radius-full: 9999px;
+
+            --shadow-sm: 0 1px 3px rgba(0,0,0,.3);
+            --shadow-md: 0 4px 12px rgba(0,0,0,.4);
+            --shadow-lg: 0 8px 24px rgba(0,0,0,.5);
+
+            --transition-fast:  150ms ease;
+            --transition-base:  250ms ease;
+            --transition-slow:  400ms ease;
+        }
+
+        @keyframes shimmer {
+            0%   { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to   { opacity: 1; }
+        }
+
+        @keyframes scaleIn {
+            from { opacity: 0; transform: scale(.96) translateY(8px); }
+            to   { opacity: 1; transform: scale(1)   translateY(0); }
+        }
+
+        /* ── Reset & Base ──────────────────────────────────────────── */
         * {
             margin: 0;
             padding: 0;
@@ -12,389 +86,504 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #1a1a1a;
-            color: #e0e0e0;
+            font-family: var(--font-family);
+            background: var(--color-bg);
+            color: var(--color-text);
             line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
 
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 20px;
+            padding: var(--space-5);
         }
 
+        /* ── Header ─────────────────────────────────────────────────── */
         .header {
-            background: #2d2d2d;
-            padding: 20px 0;
-            margin-bottom: 30px;
-            border-bottom: 3px solid #007acc;
+            background: var(--color-surface);
+            padding: var(--space-6) 0;
+            margin-bottom: var(--space-8);
+            border-bottom: 1px solid var(--color-border);
         }
 
         .header h1 {
-            color: #007acc;
+            color: var(--color-accent);
             text-align: center;
-            font-size: 2.5em;
+            font-size: var(--font-size-2xl);
+            font-weight: var(--font-weight-bold);
+            letter-spacing: -.02em;
         }
 
+        /* ── Navigation ─────────────────────────────────────────────── */
         .nav {
-            background: #333;
-            padding: 10px 0;
-            margin-bottom: 20px;
+            background: var(--color-surface);
+            padding: var(--space-2) 0;
+            margin-bottom: var(--space-5);
+            border-bottom: 1px solid var(--color-border);
         }
 
         .nav .container {
             display: flex;
             align-items: center;
-            gap: 15px;
+            gap: var(--space-3);
         }
 
         .nav a {
-            color: #e0e0e0;
+            color: var(--color-text-2nd);
             text-decoration: none;
-            padding: 10px 15px;
-            border-radius: 5px;
-            transition: background 0.3s;
+            padding: var(--space-2) var(--space-3);
+            border-radius: var(--radius-sm);
+            transition: background var(--transition-fast), color var(--transition-fast);
+            font-size: var(--font-size-sm);
+            font-weight: var(--font-weight-medium);
         }
 
         .nav a:hover {
-            background: #007acc;
+            background: rgba(255,255,255,.06);
+            color: var(--color-text);
         }
 
+        .nav .nav-lesson-count {
+            color: var(--color-text-muted);
+            margin-left: auto;
+            font-size: var(--font-size-sm);
+        }
+
+        /* ── Cards ──────────────────────────────────────────────────── */
         .card {
-            background: #2d2d2d;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 20px;
-            border-left: 4px solid #007acc;
+            background: var(--color-surface);
+            border-radius: var(--radius-md);
+            padding: var(--space-5);
+            margin-bottom: var(--space-5);
+            border-left: 4px solid var(--color-accent);
+            transition: box-shadow var(--transition-base);
         }
 
+        .card:hover {
+            box-shadow: var(--shadow-md);
+        }
+
+        .card h2 {
+            font-size: var(--font-size-xl);
+            font-weight: var(--font-weight-semibold);
+            margin-bottom: var(--space-2);
+        }
+
+        .card h3 {
+            font-size: var(--font-size-lg);
+            font-weight: var(--font-weight-semibold);
+            color: var(--color-text-2nd);
+            margin-bottom: var(--space-2);
+        }
+
+        /* ── Buttons ────────────────────────────────────────────────── */
         .btn {
-            background: #007acc;
-            color: white;
+            background: var(--color-accent);
+            color: #fff;
             border: none;
-            padding: 12px 24px;
-            border-radius: 5px;
+            padding: var(--space-2) var(--space-4);
+            border-radius: var(--radius-sm);
             cursor: pointer;
             text-decoration: none;
-            display: inline-block;
-            transition: background 0.3s;
-            font-size: 14px;
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-1);
+            transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+            font-size: var(--font-size-sm);
+            font-weight: var(--font-weight-medium);
+            font-family: var(--font-family);
+            white-space: nowrap;
         }
 
         .btn:hover {
-            background: #005a9e;
+            background: var(--color-accent-hv);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .btn:active {
+            transform: scale(.97);
         }
 
         .btn:disabled {
-            background: #666;
+            background: var(--color-text-muted);
             cursor: not-allowed;
+            box-shadow: none;
         }
 
         .btn-secondary {
-            background: #666;
+            background: rgba(255,255,255,.08);
+            color: var(--color-text);
         }
 
         .btn-secondary:hover {
-            background: #555;
+            background: rgba(255,255,255,.12);
         }
 
+        .btn-ai {
+            background: #6366f1;
+            font-size: var(--font-size-xs);
+        }
+
+        .btn-ai:hover {
+            background: #4f46e5;
+        }
+
+        /* ── Progress Bar ───────────────────────────────────────────── */
         .progress-bar {
-            background: #444;
-            border-radius: 10px;
+            background: var(--color-elevated);
+            border-radius: var(--radius-full);
             overflow: hidden;
-            height: 20px;
-            margin: 10px 0;
+            height: 8px;
+            margin: var(--space-3) 0;
         }
 
         .progress-fill {
-            background: linear-gradient(90deg, #007acc, #00a0ff);
+            background: linear-gradient(90deg, var(--color-accent), var(--color-accent-hv), var(--color-accent));
+            background-size: 200% 100%;
             height: 100%;
-            transition: width 0.3s ease;
-            border-radius: 10px;
+            border-radius: var(--radius-full);
+            transition: width var(--transition-slow);
+            animation: shimmer 3s linear infinite;
         }
 
-        /* Dynamic Directory Tree Styles */
+        /* ── Tree ───────────────────────────────────────────────────── */
         .tree-container {
-            margin-top: 20px;
+            margin-top: var(--space-5);
         }
 
         .tree-item {
-            margin-bottom: 5px;
+            margin-bottom: var(--space-1);
         }
 
         .tree-header {
-            background: #3d3d3d;
-            padding: 12px 15px;
-            border-radius: 5px;
+            background: var(--color-surface);
+            padding: var(--space-3) var(--space-4);
+            border-radius: var(--radius-sm);
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            transition: background 0.3s;
-            border-left: 3px solid #666;
+            transition: background var(--transition-fast), box-shadow var(--transition-fast);
+            border-left: 3px solid var(--color-border);
         }
 
         .tree-header:hover {
-            background: #404040;
+            background: var(--color-elevated);
         }
 
         .tree-header.directory {
-            border-left-color: #007acc;
-        }
-
-        .tree-header.lesson {
-            border-left-color: #28a745;
+            border-left-color: var(--color-accent);
         }
 
         .tree-header.completed {
-            border-left-color: #28a745;
-            background: #1e3d1e;
+            border-left-color: var(--color-success);
+            background: var(--color-success-bg);
         }
 
         .tree-header.completed:hover {
-            background: #2d5a2d;
+            background: rgba(34,197,94,.18);
         }
 
         .tree-title {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: var(--space-2);
             flex: 1;
         }
 
         .tree-icon {
-            font-size: 1.2em;
+            font-size: 1.1em;
             width: 20px;
             text-align: center;
         }
 
         .tree-name {
-            font-weight: 500;
+            font-weight: var(--font-weight-medium);
         }
 
         .tree-stats {
-            font-size: 0.85em;
-            color: #999;
-            margin-left: 10px;
+            font-size: var(--font-size-xs);
+            color: var(--color-text-muted);
+            margin-left: var(--space-2);
         }
 
         .tree-toggle {
             background: none;
             border: none;
-            color: #e0e0e0;
-            font-size: 1.2em;
+            color: var(--color-text-2nd);
+            font-size: .85em;
             cursor: pointer;
-            padding: 5px;
-            border-radius: 3px;
-            transition: background 0.3s;
+            padding: var(--space-1);
+            border-radius: var(--radius-sm);
+            transition: transform var(--transition-base), background var(--transition-fast);
         }
 
         .tree-toggle:hover {
-            background: #555;
+            background: rgba(255,255,255,.06);
         }
 
         .tree-content {
-            margin-left: 25px;
-            margin-top: 5px;
-            display: none;
+            margin-left: var(--space-6);
+            margin-top: var(--space-1);
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height var(--transition-slow);
         }
 
         .tree-content.expanded {
-            display: block;
+            max-height: 20000px;
         }
 
+        /* ── Lesson Items ───────────────────────────────────────────── */
         .lesson-item {
-            background: #3d3d3d;
-            padding: 10px 15px;
-            border-radius: 5px;
-            margin-bottom: 5px;
+            background: var(--color-surface);
+            padding: var(--space-3) var(--space-4);
+            border-radius: var(--radius-sm);
+            margin-bottom: var(--space-1);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            transition: all 0.3s;
+            transition: all var(--transition-base);
             cursor: pointer;
-            border-left: 3px solid #666;
+            border-left: 3px solid var(--color-border);
         }
 
         .lesson-item:hover {
-            border-left-color: #007acc;
-            background: #404040;
-            transform: translateX(5px);
+            border-left-color: var(--color-accent);
+            background: var(--color-elevated);
+            transform: translateX(4px);
+            box-shadow: var(--shadow-sm);
         }
 
         .lesson-item.completed {
-            border-left-color: #28a745;
-            background: #1e3d1e;
+            border-left-color: var(--color-success);
+            background: var(--color-success-bg);
         }
 
         .lesson-item.completed:hover {
-            background: #2d5a2d;
+            background: rgba(34,197,94,.18);
         }
 
         .lesson-title {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: var(--space-2);
             flex: 1;
         }
 
         .lesson-icon {
-            font-size: 1.1em;
+            font-size: 1.05em;
         }
 
         .lesson-meta {
-            font-size: 0.85em;
-            color: #999;
+            font-size: var(--font-size-xs);
+            color: var(--color-text-muted);
             display: flex;
             align-items: center;
-            gap: 5px;
+            gap: var(--space-1);
         }
 
         .lesson-type {
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-size: 0.8em;
-            font-weight: 500;
+            padding: 2px 8px;
+            border-radius: var(--radius-full);
+            font-size: .7em;
+            font-weight: var(--font-weight-semibold);
             text-transform: uppercase;
+            letter-spacing: .04em;
+            color: #fff;
         }
 
-        .lesson-type.video { background: #e74c3c; color: white; }
-        .lesson-type.audio { background: #9b59b6; color: white; }
-        .lesson-type.text { background: #34495e; color: white; }
-        .lesson-type.quiz { background: #f39c12; color: white; }
-        .lesson-type.mixed { background: #16a085; color: white; }
+        .lesson-type.video  { background: var(--color-type-video); }
+        .lesson-type.audio  { background: var(--color-type-audio); }
+        .lesson-type.text   { background: var(--color-type-text); }
+        .lesson-type.quiz   { background: var(--color-type-quiz); color: #1a1a1a; }
+        .lesson-type.mixed  { background: var(--color-type-mixed); }
 
         .status-icon {
-            font-size: 1.2em;
-            font-weight: bold;
+            font-size: 1.15em;
+            font-weight: var(--font-weight-bold);
+            transition: color var(--transition-fast);
         }
 
-        .status-icon.completed {
-            color: #28a745;
-        }
+        .status-icon.completed { color: var(--color-success); }
+        .status-icon.pending   { color: var(--color-text-muted); }
 
-        .status-icon.pending {
-            color: #666;
-        }
-
+        /* ── Course Selector (empty state) ──────────────────────────── */
         .course-selector {
-            border: 2px dashed #666;
-            padding: 40px;
+            border: 2px dashed rgba(255,255,255,.1);
+            padding: var(--space-8);
             text-align: center;
-            margin: 40px 0;
-            border-radius: 10px;
-            background: #2d2d2d;
+            margin: var(--space-8) 0;
+            border-radius: var(--radius-lg);
+            background: var(--color-surface);
+        }
+
+        .course-selector h2 {
+            font-size: var(--font-size-xl);
+            font-weight: var(--font-weight-semibold);
+            margin-bottom: var(--space-2);
+            color: var(--color-text);
+        }
+
+        .course-selector p {
+            color: var(--color-text-2nd);
+            font-size: var(--font-size-sm);
+            margin-bottom: var(--space-4);
         }
 
         .course-selector input {
-            background: #3d3d3d;
-            border: 1px solid #666;
-            color: #e0e0e0;
-            padding: 12px;
-            font-size: 14px;
-            border-radius: 5px;
-            width: 80%;
-            margin-right: 10px;
+            background: var(--color-elevated);
+            border: 1px solid rgba(255,255,255,.08);
+            color: var(--color-text);
+            padding: var(--space-3) var(--space-4);
+            font-size: var(--font-size-md);
+            border-radius: var(--radius-sm);
+            outline: none;
+            transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+            font-family: var(--font-family);
         }
 
         .course-selector input::placeholder {
-            color: #999;
+            color: var(--color-text-muted);
         }
 
         .course-selector input:focus {
-            outline: none;
-            border-color: #007acc;
-            box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.2);
+            border-color: var(--color-accent);
+            box-shadow: 0 0 0 3px rgba(59,130,246,.2);
         }
 
+        /* ── Last Accessed ──────────────────────────────────────────── */
         .last-accessed {
-            background: #2d5a2d;
-            border-left-color: #28a745;
-            margin-top: 10px;
-            padding: 10px;
-            border-radius: 5px;
+            background: var(--color-success-bg);
+            border-left: 3px solid var(--color-success);
+            margin-top: var(--space-3);
+            padding: var(--space-3) var(--space-4);
+            border-radius: var(--radius-sm);
+            font-size: var(--font-size-sm);
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: var(--space-2);
         }
 
+        .last-accessed strong {
+            color: var(--color-success);
+        }
+
+        /* ── AI Settings Modal ──────────────────────────────────────── */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,.6);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn var(--transition-fast) forwards;
+        }
+
+        .modal-overlay.open {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--color-elevated);
+            border: 1px solid rgba(255,255,255,.08);
+            border-radius: var(--radius-lg);
+            padding: var(--space-6);
+            width: min(520px, 95vw);
+            max-height: 90vh;
+            overflow-y: auto;
+            animation: scaleIn var(--transition-base) forwards;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .modal h2 {
+            color: var(--color-accent);
+            margin-bottom: var(--space-5);
+            font-size: var(--font-size-lg);
+            font-weight: var(--font-weight-semibold);
+        }
+
+        .modal label {
+            display: block;
+            color: var(--color-text-2nd);
+            font-size: var(--font-size-sm);
+            font-weight: var(--font-weight-medium);
+            margin-bottom: var(--space-1);
+            margin-top: var(--space-4);
+        }
+
+        .modal select,
+        .modal input[type=text],
+        .modal input[type=password] {
+            width: 100%;
+            background: var(--color-surface);
+            border: 1px solid rgba(255,255,255,.08);
+            color: var(--color-text);
+            padding: var(--space-3);
+            border-radius: var(--radius-sm);
+            font-size: var(--font-size-sm);
+            font-family: var(--font-family);
+            outline: none;
+            transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+        }
+
+        .modal select:focus,
+        .modal input:focus {
+            border-color: var(--color-accent);
+            box-shadow: 0 0 0 3px rgba(59,130,246,.15);
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: var(--space-2);
+            margin-top: var(--space-6);
+            justify-content: flex-end;
+            align-items: center;
+        }
+
+        .ai-hint {
+            font-size: var(--font-size-xs);
+            color: var(--color-text-muted);
+            margin-top: var(--space-1);
+        }
+
+        #ai-save-status {
+            font-size: var(--font-size-sm);
+            margin-right: auto;
+        }
+
+        /* ── Responsive ─────────────────────────────────────────────── */
         @media (max-width: 768px) {
             .container {
-                padding: 10px;
+                padding: var(--space-3);
             }
 
             .header h1 {
-                font-size: 2em;
+                font-size: var(--font-size-xl);
             }
 
             .nav .container {
                 flex-direction: column;
-                gap: 10px;
+                gap: var(--space-2);
                 align-items: flex-start;
             }
 
             .course-selector input {
                 width: 100%;
                 margin-right: 0;
-                margin-bottom: 10px;
+                margin-bottom: var(--space-2);
             }
 
             .tree-content {
-                margin-left: 15px;
+                margin-left: var(--space-4);
             }
         }
-
-        /* ── AI Settings Modal ─────────────────────────────────────── */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,.7);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-        }
-        .modal-overlay.open { display: flex; }
-        .modal {
-            background: #2d2d2d;
-            border: 1px solid #444;
-            border-radius: 10px;
-            padding: 30px;
-            width: min(560px, 95vw);
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-        .modal h2 { color: #a0a0ff; margin-bottom: 20px; }
-        .modal label {
-            display: block;
-            color: #ccc;
-            font-size: .9em;
-            margin-bottom: 4px;
-            margin-top: 14px;
-        }
-        .modal select, .modal input[type=text], .modal input[type=password] {
-            width: 100%;
-            background: #3d3d3d;
-            border: 1px solid #555;
-            color: #e0e0e0;
-            padding: 10px;
-            border-radius: 5px;
-            font-size: .95em;
-        }
-        .modal select:focus,
-        .modal input:focus { outline: none; border-color: #5c5cff; }
-        .modal-footer {
-            display: flex;
-            gap: 10px;
-            margin-top: 24px;
-            justify-content: flex-end;
-        }
-        .btn-ai { background: #5c5cff; }
-        .btn-ai:hover { background: #4444ee; }
-        .ai-hint {
-            font-size: .8em;
-            color: #888;
-            margin-top: 4px;
-        }
-        #ai-save-status { font-size:.9em; }
     </style>
 </head>
 <body>
@@ -409,10 +598,10 @@
             <div class="container">
                 <a href="/reset_course">← Select Different Course</a>
                 <a href="#stats">Progress</a>
-                <span style="color: #666; margin-left: auto;">
+                <span class="nav-lesson-count">
                     {{ stats.total_lessons }} lessons
                 </span>
-                <button class="btn btn-ai" style="padding:8px 14px;font-size:.85em;" onclick="openAiSettings()">
+                <button class="btn btn-ai" onclick="openAiSettings()">
                     🤖 AI Settings
                 </button>
             </div>
@@ -441,7 +630,7 @@
                 </div>
 
                 <div id="ai-baseurl-row">
-                    <label for="ai-baseurl">Base URL <span style="color:#777;font-size:.85em">(optional override / Ollama endpoint)</span></label>
+                    <label for="ai-baseurl">Base URL <span style="color: var(--color-text-muted); font-size: var(--font-size-xs);">(optional override / Ollama endpoint)</span></label>
                     <input type="text" id="ai-baseurl" placeholder="http://localhost:11434">
                     <p class="ai-hint">Leave blank to use the default endpoint.</p>
                 </div>
@@ -466,7 +655,7 @@
                     <div>
                         <strong>{{ stats.completed_lessons }}/{{ stats.total_lessons }}</strong> lessons completed
                     </div>
-                    <div style="color: #007acc; font-size: 1.2em;">
+                    <div style="color: var(--color-accent); font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold);">
                         {{ "%.1f"|format(stats.completion_percentage) }}%
                     </div>
                 </div>
@@ -477,7 +666,7 @@
                 {% if stats.last_accessed_path %}
                 <div class="last-accessed">
                     <strong>Last Accessed:</strong> {{ stats.last_accessed_path }}
-                    <a href="/lesson/{{ stats.last_accessed_path }}" class="btn" style="margin-left: 10px;">
+                    <a href="/lesson/{{ stats.last_accessed_path }}" class="btn" style="margin-left: var(--space-2);">
                         Continue
                     </a>
                 </div>
@@ -555,16 +744,16 @@
                     <input type="file" id="folder-input" webkitdirectory directory mozdirectory style="display: none;">
                     
                     <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                        <input type="text" id="course-path" placeholder="e.g., /Users/YourName/Courses/MyCourse" style="flex: 1; min-width: 250px; padding: 10px; border: 1px solid #555; background: #444; color: #e0e0e0; border-radius: 5px; font-size: 14px;">
+                        <input type="text" id="course-path" placeholder="e.g., /Users/YourName/Courses/MyCourse" style="flex: 1; min-width: 250px;">
                         <button onclick="loadCourseFromPath()" class="btn">Load Course</button>
-                        <button onclick="openFileDialog()" class="btn" style="background: #666; margin: 0;">Browse</button>
+                        <button onclick="openFileDialog()" class="btn btn-secondary">Browse</button>
                     </div>
                 </div>
                 
-                <div id="course-status" style="margin-top: 10px;"></div>
-                <span id="selected-folder" style="color: #999; font-size: 12px;"></span>
+                <div id="course-status" style="margin-top: var(--space-2);"></div>
+                <span id="selected-folder" style="color: var(--color-text-muted); font-size: var(--font-size-xs);"></span>
                 
-                <p style="margin-top: 20px; font-size: 12px; color: #999;">
+                <p style="margin-top: var(--space-5); font-size: var(--font-size-xs); color: var(--color-text-muted);">
                     <strong>Examples:</strong><br>
                     • C:\Users\YourName\Documents\MyCourse<br>
                     • D:\Courses\Python Tutorial<br>
@@ -572,7 +761,7 @@
                 </p>
             </div>
 
-            <div style="margin-top: 40px;">
+            <div style="margin-top: var(--space-8);">
                 <div class="card">
                     <h3>How to Use OfflineU:</h3>
                     <ul style="margin-top: 10px; list-style-type: none; padding-left: 20px;">
