@@ -484,6 +484,11 @@
                 {% endif %}
             </div>
 
+            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                <button class="btn" onclick="expandAll()">⟒ Expand All</button>
+                <button class="btn btn-secondary" onclick="collapseAll()">⤷ Collapse All</button>
+            </div>
+
             <div class="tree-container">
                 {% macro render_tree_node(node, depth=0) %}
                 <div class="tree-item">
@@ -615,6 +620,16 @@
             } else {
                 console.log('No content element found or not tree-content');
             }
+        }
+
+        function expandAll() {
+            document.querySelectorAll('.tree-content').forEach(c => c.classList.add('expanded'));
+            document.querySelectorAll('.tree-toggle').forEach(t => t.textContent = '▼');
+        }
+
+        function collapseAll() {
+            document.querySelectorAll('.tree-content').forEach(c => c.classList.remove('expanded'));
+            document.querySelectorAll('.tree-toggle').forEach(t => t.textContent = '▶');
         }
 
         function openFileDialog() {
