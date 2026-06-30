@@ -11,6 +11,7 @@ import mimetypes
 import re
 import sys
 import argparse
+import sqlite3
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from datetime import datetime
@@ -117,7 +118,7 @@ class DynamicCourseParser:
         # Calculate completion statistics
         stats = DynamicCourseParser._calculate_completion_stats(root_node)
         
-        progress_file = str(course_path / ".offlineu_progress.json")
+        progress_file = str(course_path / ".offlineu_progress.db")
 
         return Course(
             name=course_name,
@@ -276,94 +277,171 @@ class DynamicCourseParser:
 
 
 class ProgressTracker:
-    """Handles progress tracking and persistence"""
+    """Handles progress tracking and persistence using SQLite"""
 
     @staticmethod
-    def _normalize_progress(raw: Dict[str, Any]) -> Dict[str, Any]:
-        """Normalize legacy progress keys: HTML-unescape &amp; and strip old title suffix."""
-        import html
-        normalized: Dict[str, Any] = {}
-        for key, value in raw.items():
-            if key == 'last_accessed_path':
-                # Normalize the stored path value too
-                normalized[key] = html.unescape(key if not isinstance(value, str) else value)
-                continue
-            clean_key = html.unescape(key)
-            # Strip legacy title suffix: last component has no file extension → it's a title
-            parts = clean_key.rsplit('/', 1)
-            if len(parts) == 2 and '.' not in parts[1]:
-                clean_key = parts[0]
-            # Deduplicate: prefer the entry marked completed or the later timestamp
-            if clean_key in normalized and isinstance(value, dict) and isinstance(normalized[clean_key], dict):
-                existing = normalized[clean_key]
-                if value.get('completed') and not existing.get('completed'):
-                    normalized[clean_key] = value
-            else:
-                normalized[clean_key] = value
-        return normalized
+    def _get_conn(course: Course) -> sqlite3.Connection:
+        conn = sqlite3.connect(course.progress_file)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        return conn
+
+    @staticmethod
+    def _init_db(course: Course):
+        """Create tables if they don't exist. Migrate from legacy JSON if present."""
+        json_path = course.progress_file.replace('.db', '.json')
+        db_exists = os.path.exists(course.progress_file)
+
+        conn = ProgressTracker._get_conn(course)
+        try:
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS progress (
+                    lesson_path TEXT PRIMARY KEY,
+                    completed INTEGER NOT NULL DEFAULT 0,
+                    progress_seconds INTEGER NOT NULL DEFAULT 0,
+                    last_accessed TEXT
+                )
+            ''')
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS meta (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )
+            ''')
+            conn.commit()
+
+            if not db_exists and os.path.exists(json_path):
+                ProgressTracker._migrate_from_json(course, conn, json_path)
+        finally:
+            conn.close()
+
+    @staticmethod
+    def _migrate_from_json(course: Course, conn: sqlite3.Connection, json_path: str):
+        """Import progress data from legacy JSON file, then rename it to .bak."""
+        try:
+            with open(json_path, 'r') as f:
+                data = json.load(f)
+
+            for key, value in data.items():
+                if key == 'last_accessed_path':
+                    conn.execute(
+                        'INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)',
+                        ('last_accessed_path', str(value))
+                    )
+                elif isinstance(value, dict):
+                    conn.execute(
+                        'INSERT OR REPLACE INTO progress (lesson_path, completed, progress_seconds, last_accessed) VALUES (?, ?, ?, ?)',
+                        (key,
+                         1 if value.get('completed') else 0,
+                         value.get('progress_seconds', 0),
+                         value.get('last_accessed'))
+                    )
+
+            conn.commit()
+            os.rename(json_path, json_path + '.bak')
+            logger.info(f"Migrated progress from {json_path} to SQLite")
+        except Exception as e:
+            logger.error(f"Failed to migrate progress from JSON: {e}")
 
     @staticmethod
     def load_progress(course: Course) -> Dict[str, Any]:
-        """Load progress from JSON file"""
+        """Load progress from SQLite database. Returns same dict format as before."""
         try:
-            if not os.path.exists(course.progress_file):
-                return {}
-            with open(course.progress_file, 'r') as f:
-                raw = json.load(f)
-            return ProgressTracker._normalize_progress(raw)
-        except (FileNotFoundError, json.JSONDecodeError):
-            return {}
+            ProgressTracker._init_db(course)
+            conn = ProgressTracker._get_conn(course)
+            try:
+                rows = conn.execute(
+                    'SELECT lesson_path, completed, progress_seconds, last_accessed FROM progress'
+                ).fetchall()
+                result: Dict[str, Any] = {}
+                for row in rows:
+                    result[row['lesson_path']] = {
+                        'completed': bool(row['completed']),
+                        'progress_seconds': row['progress_seconds'],
+                        'last_accessed': row['last_accessed']
+                    }
+
+                meta_row = conn.execute(
+                    "SELECT value FROM meta WHERE key = 'last_accessed_path'"
+                ).fetchone()
+                if meta_row:
+                    result['last_accessed_path'] = meta_row['value']
+
+                return result
+            finally:
+                conn.close()
         except Exception as e:
             logger.error(f"Error loading progress: {e}")
             return {}
 
     @staticmethod
     def save_progress(course: Course, progress_data: Dict[str, Any]):
-        """Save progress to JSON file"""
+        """Save full progress dict to SQLite (batch upsert)."""
         try:
-            with open(course.progress_file, 'w') as f:
-                json.dump(progress_data, f, indent=2)
-            logger.info(f"Progress saved: {course.progress_file}")
+            ProgressTracker._init_db(course)
+            conn = ProgressTracker._get_conn(course)
+            try:
+                for key, value in progress_data.items():
+                    if key == 'last_accessed_path':
+                        conn.execute(
+                            'INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)',
+                            ('last_accessed_path', str(value))
+                        )
+                    elif isinstance(value, dict):
+                        conn.execute(
+                            'INSERT OR REPLACE INTO progress (lesson_path, completed, progress_seconds, last_accessed) VALUES (?, ?, ?, ?)',
+                            (key,
+                             1 if value.get('completed') else 0,
+                             value.get('progress_seconds', 0),
+                             value.get('last_accessed'))
+                        )
+                conn.commit()
+                logger.info(f"Progress saved: {course.progress_file}")
+            finally:
+                conn.close()
         except Exception as e:
             logger.error(f"Error saving progress to {course.progress_file}: {e}")
 
     @staticmethod
     def update_lesson_progress(course: Course, lesson_path: str, completed: bool = False, progress_seconds: int = 0):
-        """Update progress for specific lesson by path"""
+        """Update progress for specific lesson by path (single upsert, no load required)."""
         logger.info(f"Updating progress: path={lesson_path!r}, completed={completed}, seconds={progress_seconds}")
-        progress = ProgressTracker.load_progress(course)
-        
-        progress[lesson_path] = {
-            'completed': completed,
-            'progress_seconds': progress_seconds,
-            'last_accessed': datetime.now().isoformat()
-        }
-        progress['last_accessed_path'] = lesson_path
-        
-        ProgressTracker.save_progress(course, progress)
+        ProgressTracker._init_db(course)
+        conn = ProgressTracker._get_conn(course)
+        try:
+            conn.execute(
+                'INSERT OR REPLACE INTO progress (lesson_path, completed, progress_seconds, last_accessed) VALUES (?, ?, ?, ?)',
+                (lesson_path, 1 if completed else 0, progress_seconds, datetime.now().isoformat())
+            )
+            conn.execute(
+                'INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)',
+                ('last_accessed_path', lesson_path)
+            )
+            conn.commit()
+        finally:
+            conn.close()
 
     @staticmethod
     def apply_progress_to_tree(course: Course):
         """Apply saved progress to the course tree"""
         progress = ProgressTracker.load_progress(course)
-        
+
         def apply_to_node(node: DirectoryNode):
             for lesson in node.lessons:
                 lesson_path = os.path.relpath(lesson.path, course.path)
                 lesson_path = lesson_path.replace('\\', '/')
                 if lesson_path.startswith('/'):
                     lesson_path = lesson_path[1:]
-                
-                # Look up by the canonical path key
+
                 data = progress.get(lesson_path)
                 if data:
                     lesson.completed = data.get('completed', False)
                     lesson.last_accessed = data.get('last_accessed')
                     lesson.progress_seconds = data.get('progress_seconds', 0)
-            
+
             for child in node.children.values():
                 apply_to_node(child)
-        
+
         apply_to_node(course.root_node)
         course.last_accessed_path = progress.get('last_accessed_path')
 

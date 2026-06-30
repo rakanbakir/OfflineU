@@ -88,7 +88,7 @@ MyCourse/
 │   ├── 04 - Advanced Tips.mp4
 │   └── resources/
 │       └── extras.md
-└── .offlineu_progress.json  ← created automatically
+└── .offlineu_progress.db  ← created automatically
 ```
 
 > 🌟 File types are detected automatically — videos, audio, quizzes, and docs.
@@ -156,7 +156,7 @@ Check logs to track:
 - **Organize by chapters**: Create folders for each section or chapter for better navigation
 - **Use descriptive names**: Prefix videos with numbers (e.g., `01 - Intro.mp4`, `02 - Setup.mp4`)
 - **Mixed content**: Put videos, notes, and PDFs in the same folder — OfflineU handles all types
-- **Progress saves automatically**: Your completion status and bookmarks are saved locally in `.offlineu_progress.json`
+- **Progress saves automatically**: Your completion status and bookmarks are saved locally in `.offlineu_progress.db` (SQLite)
 - **No internet needed**: Everything is processed locally — no uploads, no tracking
 
 ---

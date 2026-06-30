@@ -23,6 +23,8 @@ Dockerfile
 
 # OfflineU specific
 .offlineu_progress.json
+.offlineu_progress.db
+.offlineu_progress.json.bak
 data/
 courses/
 
