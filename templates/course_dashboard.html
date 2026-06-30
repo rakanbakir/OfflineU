@@ -309,6 +309,22 @@
             margin-left: var(--space-2);
         }
 
+        .folder-mark-all {
+            font-size: var(--font-size-xs);
+            color: var(--color-accent);
+            margin-left: var(--space-2);
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: var(--radius-sm);
+            transition: background var(--transition-fast), color var(--transition-fast);
+            user-select: none;
+        }
+
+        .folder-mark-all:hover {
+            background: rgba(93, 202, 122, 0.15);
+            color: var(--color-success);
+        }
+
         .tree-toggle {
             background: none;
             border: none;
@@ -653,14 +669,14 @@
                 <h2>{{ course.name }}</h2>
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; flex-wrap: wrap; gap: 10px;">
                     <div>
-                        <strong>{{ stats.completed_lessons }}/{{ stats.total_lessons }}</strong> lessons completed
+                        <strong id="completed-count">{{ stats.completed_lessons }}/{{ stats.total_lessons }}</strong> lessons completed
                     </div>
-                    <div style="color: var(--color-accent); font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold);">
+                    <div id="completion-percentage" style="color: var(--color-accent); font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold);">
                         {{ "%.1f"|format(stats.completion_percentage) }}%
                     </div>
                 </div>
                 <div class="progress-bar">
-                    <div class="progress-fill" style="width: {{ stats.completion_percentage }}%;"></div>
+                    <div id="progress-fill" class="progress-fill" style="width: {{ stats.completion_percentage }}%;"></div>
                 </div>
 
                 {% if stats.last_accessed_path %}
@@ -688,6 +704,11 @@
                             <span class="tree-stats">
                                 {{ (node.children|length + node.lessons|length) }} items
                             </span>
+                            {% if node.lessons %}
+                            <span class="folder-mark-all" onclick="event.stopPropagation(); toggleFolderComplete(this)" title="Toggle all lessons in this folder">
+                                ✓ All
+                            </span>
+                            {% endif %}
                         </div>
                         {% if node.children or node.lessons %}
                         <button class="tree-toggle">▶</button>
@@ -787,38 +808,79 @@
     {% endif %}
 
     <script>
+        // ── Persist tree expansion state across page reloads ──────────────
+
+        function getCourseKey() {
+            const h2 = document.querySelector('.card h2');
+            return h2 ? h2.textContent.trim() : 'default';
+        }
+
+        function persistTreeState(header, isExpanded) {
+            const index = header.getAttribute('data-tree-index');
+            if (index !== null) {
+                localStorage.setItem('tree-' + getCourseKey() + '-' + index, isExpanded ? 'true' : 'false');
+            }
+        }
+
+        function restoreTreeState() {
+            const headers = document.querySelectorAll('.tree-header.directory');
+            headers.forEach(function(header, index) {
+                header.setAttribute('data-tree-index', index);
+                const key = 'tree-' + getCourseKey() + '-' + index;
+                if (localStorage.getItem(key) === 'true') {
+                    const content = header.nextElementSibling;
+                    const toggle = header.querySelector('.tree-toggle');
+                    if (content && content.classList.contains('tree-content')) {
+                        content.classList.add('expanded');
+                        if (toggle) toggle.textContent = '▼';
+                    }
+                }
+            });
+        }
+
+        // Restore saved expansion state once the DOM is ready
+        document.addEventListener('DOMContentLoaded', restoreTreeState);
+
+        // ── Tree toggle functions ──────────────────────────────────────────
+
         function toggleTree(element) {
-            console.log('Toggle clicked:', element);
-            
-            // Find the content div that comes after this header
             const content = element.nextElementSibling;
             const toggle = element.querySelector('.tree-toggle');
-            
-            console.log('Content element:', content);
-            console.log('Toggle element:', toggle);
-            
+
             if (content && content.classList.contains('tree-content')) {
-                const isExpanded = content.classList.contains('expanded');
                 content.classList.toggle('expanded');
-                
+                const isExpanded = content.classList.contains('expanded');
+
                 if (toggle) {
-                    toggle.textContent = content.classList.contains('expanded') ? '▼' : '▶';
+                    toggle.textContent = isExpanded ? '▼' : '▶';
                 }
-                
-                console.log('Toggled tree, expanded:', content.classList.contains('expanded'));
-            } else {
-                console.log('No content element found or not tree-content');
+
+                persistTreeState(element, isExpanded);
             }
         }
 
         function expandAll() {
-            document.querySelectorAll('.tree-content').forEach(c => c.classList.add('expanded'));
-            document.querySelectorAll('.tree-toggle').forEach(t => t.textContent = '▼');
+            document.querySelectorAll('.tree-header.directory').forEach(function(header) {
+                const content = header.nextElementSibling;
+                const toggle = header.querySelector('.tree-toggle');
+                if (content && content.classList.contains('tree-content')) {
+                    content.classList.add('expanded');
+                    if (toggle) toggle.textContent = '▼';
+                }
+                persistTreeState(header, true);
+            });
         }
 
         function collapseAll() {
-            document.querySelectorAll('.tree-content').forEach(c => c.classList.remove('expanded'));
-            document.querySelectorAll('.tree-toggle').forEach(t => t.textContent = '▶');
+            document.querySelectorAll('.tree-header.directory').forEach(function(header) {
+                const content = header.nextElementSibling;
+                const toggle = header.querySelector('.tree-toggle');
+                if (content && content.classList.contains('tree-content')) {
+                    content.classList.remove('expanded');
+                    if (toggle) toggle.textContent = '▶';
+                }
+                persistTreeState(header, false);
+            });
         }
 
         function openFileDialog() {
@@ -1069,6 +1131,25 @@
             });
         }
 
+        // ── Update progress stats in the DOM ──────────────────────────────
+
+        function updateProgressStats() {
+            const allLessons = document.querySelectorAll('.lesson-item');
+            const completedLessons = document.querySelectorAll('.lesson-item.completed');
+
+            const total = allLessons.length;
+            const completed = completedLessons.length;
+            const pct = total > 0 ? (completed / total) * 100 : 0;
+
+            const countEl = document.getElementById('completed-count');
+            const pctEl = document.getElementById('completion-percentage');
+            const barEl = document.getElementById('progress-fill');
+
+            if (countEl) countEl.textContent = completed + '/' + total + '';
+            if (pctEl) pctEl.textContent = pct.toFixed(1) + '%';
+            if (barEl) barEl.style.width = pct + '%';
+        }
+
         // ── Toggle lesson completion from dashboard ─────────────────────
 
         function toggleLessonComplete(statusIcon, lessonPath) {
@@ -1102,11 +1183,66 @@
                         statusIcon.textContent = '○';
                         statusIcon.title = 'Click to mark complete';
                     }
-                    // Refresh the page to update progress stats
-                    setTimeout(() => location.reload(), 500);
+                    // Update progress stats in-place without a page reload
+                    updateProgressStats();
                 }
             })
             .catch(err => console.error('Failed to toggle lesson:', err));
+        }
+
+        // ── Toggle all lessons in a folder ─────────────────────────────────
+
+        function toggleFolderComplete(markAllBtn) {
+            const treeHeader = markAllBtn.closest('.tree-header');
+            const treeItem = treeHeader.closest('.tree-item');
+            const lessonItems = treeItem.querySelectorAll(':scope > .tree-content > .lesson-item');
+
+            if (lessonItems.length === 0) return;
+
+            const allCompleted = Array.from(lessonItems).every(function(item) {
+                return item.classList.contains('completed');
+            });
+            const targetCompleted = !allCompleted;
+
+            markAllBtn.textContent = targetCompleted ? '…' : '…';
+
+            const promises = Array.from(lessonItems).map(function(lessonItem) {
+                const lessonPath = lessonItem.getAttribute('data-lesson-path');
+                const statusIcon = lessonItem.querySelector('.status-icon');
+
+                return fetch('/api/progress', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        lesson_path: lessonPath,
+                        completed: targetCompleted,
+                        progress_seconds: 0
+                    })
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.success) {
+                        if (targetCompleted) {
+                            lessonItem.classList.add('completed');
+                            statusIcon.classList.remove('pending');
+                            statusIcon.classList.add('completed');
+                            statusIcon.textContent = '✓';
+                            statusIcon.title = 'Click to un-mark';
+                        } else {
+                            lessonItem.classList.remove('completed');
+                            statusIcon.classList.remove('completed');
+                            statusIcon.classList.add('pending');
+                            statusIcon.textContent = '○';
+                            statusIcon.title = 'Click to mark complete';
+                        }
+                    }
+                });
+            });
+
+            Promise.all(promises).then(function() {
+                markAllBtn.textContent = '✓ All';
+                updateProgressStats();
+            });
         }
     </script>
 </body>
